@@ -1,0 +1,92 @@
+import { decode } from 'base64-arraybuffer';
+import * as FileSystem from 'expo-file-system';
+import { supabase } from '../lib/supabase';
+import { supabaseUrl } from '../constants';
+
+export const getUserImageSrc = imagePath => {
+    if (imagePath) {
+        return getSupabaseFileUrl(imagePath);
+    }else {
+        return require('../assets/images/defaultUser.png')
+    }
+}
+
+export const getSupabaseFileUrl = filePath =>{
+    if (filePath) {
+        return { uri: `${supabaseUrl}/storage/v1/object/public/uploads/${filePath}`}
+    }
+    return null;
+}
+
+// export const downloadFile = async (url)=>{
+//     try {
+//         const {uri} = await FileSystem.downloadAsync(url, getLocalFilePath(url))
+//         return uri;
+//     } catch (error) {
+//         return null;
+//     }
+// }
+
+export const downloadFile = async (url) => {
+    try {
+        // Validate URL before attempting to download
+        if (!url || typeof url !== 'string') {
+            throw new Error('Invalid URL');
+        }
+
+        // Download file
+        const { uri } = await FileSystem.downloadAsync(url, getLocalFilePath(url));
+
+        // Ensure file was downloaded successfully
+        if (uri) {
+            console.log('File downloaded to:', uri);
+            return uri;
+        } else {
+            throw new Error('File download failed');
+        }
+    } catch (error) {
+        console.error('Download file error:', error.message);
+        return null;
+    }
+};
+
+
+export const getLocalFilePath = filePath => {
+    let filename = filePath.split('/').pop();
+    return `${FileSystem.documentDirectory}${filename}`;
+}
+
+export const uploadFile = async (folderName, fileUri, isImage=true) =>{
+    try {
+        let fileName = getFilePath(folderName, isImage);
+        const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
+            encoding: FileSystem.EncodingType.Base64
+        });
+
+        let imageData = decode(fileBase64);  
+
+        let { data, error } = await supabase
+                .storage
+                .from('uploads')
+                .upload(fileName, imageData, {
+                    cacheControl: '3600',
+                    upsert: false,
+                    contentType: isImage? 'image/*' : 'video/*'
+                 });
+                 if (error) {
+                    console.log('file upload error: ', error);
+                    return {success: false, msg: 'Could not upload media'}
+                 }
+                 
+                 return {success: true, data: data.path}
+
+    } catch (error) {
+        console.log('file upload error: ', error);
+        return {success: false, msg: 'Could not upload media'}
+    }
+}
+
+
+export const getFilePath = (folderName, isImage) =>{
+    return `/${folderName}/${(new Date()).getTime()}${isImage? '.png': '.mp4'}`
+}
